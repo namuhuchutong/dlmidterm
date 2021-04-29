@@ -124,30 +124,6 @@ def run_test(x, y):
     accuracy = eval_accuracy(output, y)
     return accuracy
 
-def forward_postproc(output, y):
-    diff = output - y
-    square = np.square(diff)
-    loss = np.mean(square)
-    return loss, diff
-
-
-def backprop_postproc(G_loss, diff):
-    shape = diff.shape
-
-    g_loss_square = np.ones(shape) / np.prod(shape)
-    g_square_diff = 2 * diff
-    g_diff_output = 1
-
-    G_square = g_loss_square * G_loss
-    G_diff = g_square_diff * G_square
-    G_output = g_diff_output * G_diff
-
-    return G_output
-
-def eval_accuracy(output, y):
-    mdiff = np.mean(np.abs((output - y)/y))
-    return 1 - mdiff
-
 
 def init_model_hidden1():
     global pm_output, pm_hidden, input_cnt, output_cnt, hidden_cnt
@@ -281,6 +257,139 @@ def set_hidden(info):
         hidden_config = None
     else:
         hidden_config = info
+
+#------------------------------------------
+#   abalone
+'''
+def forward_postproc(output, y):
+    diff = output - y
+    square = np.square(diff)
+    loss = np.mean(square)
+    return loss, diff
+
+
+def backprop_postproc(G_loss, diff):
+    shape = diff.shape
+
+    g_loss_square = np.ones(shape) / np.prod(shape)
+    g_square_diff = 2 * diff
+    g_diff_output = 1
+
+    G_square = g_loss_square * G_loss
+    G_diff = g_square_diff * G_square
+    G_output = g_diff_output * G_diff
+
+    return G_output
+def eval_accuracy(output, y):
+    mdiff = np.mean(np.abs((output - y)/y))
+    return 1 - mdiff
+'''
+#------------------------------------------
+
+#------------------------------------------
+#   pulsar
+'''
+def forward_postproc(output, y):
+    entropy = sigmoid_cross_entropy_with_logits(y, output)
+    loss = np.mean(entropy)
+    return loss, [y, output, entropy]
+
+
+def backprop_postproc(G_loss, aux):
+    y, output, entropy = aux
+
+    g_loss_entropy = 1.0 / np.prod(entropy.shape)
+    g_entropy_output = sigmoid_cross_entropy_with_logits_derv(y, output)
+
+    G_entropy = g_loss_entropy * G_loss
+    G_output = g_entropy_output * G_entropy
+
+    return G_output
+
+
+def eval_accuracy(output, y):
+    estimate = np.greater(output, 0)
+    answer = np.greater(y, 0.5)
+    correct = np.equal(estimate, answer)
+
+    return np.mean(correct)
+'''
+#------------------------------------------
+
+#------------------------------------------
+#   steel
+#'''
+def forward_postproc(output, y):
+    entropy = softmax_cross_entropy_with_logits(y, output)
+    loss = np.mean(entropy)
+    return loss, [y, output, entropy]
+
+
+def backprop_postproc(G_loss, aux):
+    y, output, entropy = aux
+
+    g_loss_entropy = 1.0 / np.prod(entropy.shape)
+    g_entropy_output = softmax_cross_entropy_with_logits_derv(y, output)
+
+    G_entropy = g_loss_entropy * G_loss
+    G_output = g_entropy_output * G_entropy
+
+    return G_output
+
+
+def eval_accuracy(output, y):
+    estimate = np.argmax(output, axis=1)
+    answer = np.argmax(y, axis=1)
+    correct = np.equal(estimate, answer)
+
+    return np.mean(correct)
+#'''
+#------------------------------------------
+
+
+def relu(x):
+    return np.maximum(x, 0)
+
+
+def sigmoid(x):
+    return np.exp(-relu(-x)) / (1.0 + np.exp(-np.abs(x)))
+
+
+def sigmoid_derv(x, y):
+    return y * (1 - y)
+
+
+def sigmoid_cross_entropy_with_logits(z, x):
+    return relu(x) - x * z + np.log(1 + np.exp(-np.abs(x)))
+
+
+def sigmoid_cross_entropy_with_logits_derv(z, x):
+    return -z + sigmoid(x)
+
+def softmax(x):
+    max_elem = np.max(x, axis=1)
+    diff = (x.transpose() - max_elem).transpose()
+    exp = np.exp(diff)
+    sum_exp = np.sum(exp, axis=1)
+    probs = (exp.transpose() / sum_exp).transpose()
+    return probs
+
+def softmax_derv(x, y):
+    mb_size, nom_size = x.shape
+    derv = np.ndarray([mb_size, nom_size, nom_size])
+    for n in range(mb_size):
+        for i in range(nom_size):
+            for j in range(nom_size):
+                derv[n, i, j] = -y[n,i] * y[n,j]
+            derv[n, i, i] += y[n,i]
+    return derv
+
+def softmax_cross_entropy_with_logits(labels, logits):
+    probs = softmax(logits)
+    return -np.sum(labels * np.log(probs+1.0e-10), axis=1)
+
+def softmax_cross_entropy_with_logits_derv(labels, logits):
+    return softmax(logits) - labels
 
 if __name__ == "__main__":
     RND_MEAN = 0
